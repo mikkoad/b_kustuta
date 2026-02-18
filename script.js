@@ -49,19 +49,19 @@ const LEVELS = [
     entryText: "Sector 01: find blue keycard and extract.",
     map: `
       ####################
-      #S...E....#....M..X#
+      #S...E..E.#....M..X#
       #.####.##.#.##.##..#
       #....#....#..#..#..#
       #.##.#.##.#..#..#..#
       #..#.#....#..##.#..#
       ##.#.##.#.#.....#..#
-      #..#..#.#.#####.#..#
+      #..#..#.#.#####.#F.#
       #..##.#.#...E.#.#..#
       #.....#..###.#.#...#
       #.#####.#####.#.#..#
       #...T...#.....#.#K.#
       #.#####.#.#####.##.#
-      #.....H.#...R......#
+      #..E..H.#...R..E...#
       ####################
     `,
   },
@@ -73,7 +73,7 @@ const LEVELS = [
     entryText: "Sector 02: neutralize resistance before extraction.",
     map: `
       %%%%%%%%%%%%%%%%%%%%%%
-      %S...#....E....#....X%
+      %S..E#..E.E..F.#....X%
       %.%%.#.%%%%%%%.#.%%..%
       %....#.....#...#..#..%
       %.######.#.#.###..#..%
@@ -83,10 +83,10 @@ const LEVELS = [
       %.##.#.#.###.#.###.#.%
       %..#.#...#...#...#.#.%
       %..#.#####.#####.#.#.%
-      %..#.....F.....#.#.#.%
+      %..#..B..F..E..#.#.#.%
       %..#####.#####.#.#.#.%
       %..#..H..#..R..#.#K#.%
-      %..#..E..#.....#....#%
+      %..#E.E..#..F..#..E.#%
       %%%%%%%%%%%%%%%%%%%%%%
     `,
   },
@@ -98,19 +98,19 @@ const LEVELS = [
     entryText: "Final sector: wipe all hostiles and escape.",
     map: `
       @@@@@@@@@@@@@@@@@@@@@@
-      @S....E...#....B....X@
+      @S..E.E...#..F.B....X@
       @.#######.#.######.#.@
       @...#.....#......#.#.@
       @.#.#.##########.#.#.@
-      @.#.#....F....#..#.#.@
+      @.#.#..E.F..E.#..#.#.@
       @.#.####.####.#.##.#.@
       @.#....#....#.#....#.@
       @.####.####.#.####.#.@
-      @....#....#.#..E..#..@
+      @..E.#.F..#.#..E..#..@
       @.##.####.#.#####.##.@
       @..#..T...#.....#..#.@
       @@.#.#####.###.#.##.#@
-      @..#...H.....#.#.R#K.@
+      @E.#...H..B..#.#.R#K.@
       @..######.####.#....#@
       @@@@@@@@@@@@@@@@@@@@@@
     `,
@@ -150,7 +150,11 @@ const player = {
   angle: 0,
   health: 100,
   armor: 40,
-  ammo: 50,
+  clipAmmo: 12,
+  reserveAmmo: 72,
+  maxClip: 12,
+  reloadTimer: 0,
+  reloadTransfer: 0,
   keycard: false,
   fireCooldown: 0,
   muzzle: 0,
@@ -184,6 +188,7 @@ const activePointers = new Map();
 let currentLevel = null;
 let audioCtx = null;
 let noisePattern = null;
+let ambientNodes = null;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -357,6 +362,64 @@ function playEmpty() {
   beep({ freq: 210, duration: 0.03, gain: 0.015, type: "square", slide: -25 });
 }
 
+function playReloadStart() {
+  beep({ freq: 240, duration: 0.06, gain: 0.02, type: "triangle", slide: 70 });
+  beep({ freq: 120, duration: 0.09, gain: 0.015, type: "square", slide: -20 });
+}
+
+function playReloadEnd() {
+  beep({ freq: 690, duration: 0.04, gain: 0.02, type: "sine", slide: 110 });
+}
+
+function playKill() {
+  beep({ freq: 180, duration: 0.06, gain: 0.028, type: "sawtooth", slide: 180 });
+}
+
+function playGate() {
+  beep({ freq: 420, duration: 0.08, gain: 0.02, type: "triangle", slide: 120 });
+}
+
+function startAmbientLoop() {
+  if (!audioCtx || ambientNodes) return;
+  const oscA = audioCtx.createOscillator();
+  const oscB = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+
+  oscA.type = "sawtooth";
+  oscB.type = "triangle";
+  oscA.frequency.value = 47;
+  oscB.frequency.value = 83;
+  filter.type = "lowpass";
+  filter.frequency.value = 320;
+  gain.gain.value = 0.0055;
+
+  oscA.connect(filter);
+  oscB.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  oscA.start();
+  oscB.start();
+  ambientNodes = { oscA, oscB, gain, filter };
+}
+
+function stopAmbientLoop() {
+  if (!ambientNodes) return;
+  const { oscA, oscB, gain, filter } = ambientNodes;
+  try {
+    oscA.stop();
+    oscB.stop();
+  } catch (_) {
+    // ignore stop errors
+  }
+  oscA.disconnect();
+  oscB.disconnect();
+  gain.disconnect();
+  filter.disconnect();
+  ambientNodes = null;
+}
+
 function showToast(text, duration = 1.6) {
   game.toastTimer = duration;
   toastEl.textContent = text;
@@ -454,10 +517,11 @@ function castRay(rayAngle, maxDepth = MAX_DEPTH) {
 
   let hit = false;
   let side = 0;
-  let dist = maxDepth;
+  let dist = 0;
   let wallType = "#";
+  let steps = 0;
 
-  while (!hit && dist < maxDepth) {
+  while (!hit && dist < maxDepth && steps < 2048) {
     if (sideDistX < sideDistY) {
       sideDistX += deltaDistX;
       mapX += stepX;
@@ -479,7 +543,8 @@ function castRay(rayAngle, maxDepth = MAX_DEPTH) {
       wallType = currentLevel.grid[mapY][mapX];
     }
 
-    dist = Math.min(sideDistX, sideDistY);
+    dist = side === 0 ? sideDistX - deltaDistX : sideDistY - deltaDistY;
+    steps += 1;
   }
 
   if (hit) {
@@ -519,14 +584,14 @@ function updateObjective() {
 function updateHud() {
   healthValueEl.textContent = String(Math.max(0, Math.ceil(player.health)));
   armorValueEl.textContent = String(Math.max(0, Math.ceil(player.armor)));
-  ammoValueEl.textContent = String(Math.max(0, Math.ceil(player.ammo)));
+  ammoValueEl.textContent = `${Math.max(0, player.clipAmmo)} / ${Math.max(0, player.reserveAmmo)}`;
   scoreEl.textContent = String(game.totalScore);
   killsEl.textContent = `${game.levelKills} / ${game.totalKillsInLevel}`;
   keyValueEl.textContent = player.keycard ? "Yes" : "No";
   keyValueEl.style.color = player.keycard ? "#9bff74" : "#ff8aa5";
   healthBar.style.width = `${clamp(player.health, 0, 100)}%`;
   armorBar.style.width = `${clamp(player.armor, 0, 100)}%`;
-  ammoBar.style.width = `${clamp((player.ammo / 120) * 100, 0, 100)}%`;
+  ammoBar.style.width = `${clamp((player.clipAmmo / player.maxClip) * 100, 0, 100)}%`;
 }
 
 function setOverlay(options) {
@@ -561,7 +626,11 @@ function resetRunState() {
   game.timeInRun = 0;
   player.health = 100;
   player.armor = 40;
-  player.ammo = 52;
+  player.clipAmmo = 12;
+  player.reserveAmmo = 72;
+  player.maxClip = 12;
+  player.reloadTimer = 0;
+  player.reloadTransfer = 0;
   player.keycard = false;
   player.dead = false;
 }
@@ -577,7 +646,7 @@ function loadLevel(index, freshRun = false) {
   if (!freshRun && index > 0) {
     player.health = clamp(player.health + 18, 1, 100);
     player.armor = clamp(player.armor + 12, 0, 100);
-    player.ammo = clamp(player.ammo + 24, 0, 120);
+    player.reserveAmmo = clamp(player.reserveAmmo + 24, 0, 240);
   }
 
   player.keycard = false;
@@ -598,6 +667,7 @@ function loadLevel(index, freshRun = false) {
 
 function beginRun() {
   ensureAudio();
+  startAmbientLoop();
   resetRunState();
   loadLevel(0, true);
   game.mode = "running";
@@ -606,12 +676,15 @@ function beginRun() {
 
 function resumeRun() {
   if (game.mode !== "paused") return;
+  ensureAudio();
+  startAmbientLoop();
   game.mode = "running";
   hideOverlay();
 }
 
 function pauseRun() {
   if (game.mode !== "running") return;
+  stopAmbientLoop();
   game.mode = "paused";
   setOverlay({
     title: "Paused",
@@ -622,6 +695,7 @@ function pauseRun() {
 }
 
 function finishRun() {
+  stopAmbientLoop();
   game.mode = "win";
   const accuracy = game.shots > 0 ? Math.round((game.hits / game.shots) * 100) : 0;
   setOverlay({
@@ -634,6 +708,7 @@ function finishRun() {
 }
 
 function failRun() {
+  stopAmbientLoop();
   game.mode = "dead";
   player.dead = true;
   setOverlay({
@@ -646,6 +721,7 @@ function failRun() {
 }
 
 function completeLevel() {
+  playGate();
   const bonus = 180 + Math.max(0, Math.round(player.health * 1.6));
   game.totalScore += bonus;
   if (game.levelIndex >= LEVELS.length - 1) {
@@ -680,6 +756,7 @@ function handleEnemyKilled(enemy) {
   enemy.alive = false;
   game.levelKills += 1;
   game.totalKillsRun += 1;
+  playKill();
 
   if (game.comboTimer > 0) {
     game.combo += 1;
@@ -701,9 +778,31 @@ function handleEnemyKilled(enemy) {
   updateHud();
 }
 
+function startReload() {
+  if (game.mode !== "running") return false;
+  if (player.reloadTimer > 0) return false;
+  if (player.clipAmmo >= player.maxClip) return false;
+  if (player.reserveAmmo <= 0) {
+    playEmpty();
+    showToast("No reserve ammo", 0.8);
+    return false;
+  }
+
+  const need = player.maxClip - player.clipAmmo;
+  player.reloadTransfer = Math.min(need, player.reserveAmmo);
+  if (player.reloadTransfer <= 0) return false;
+
+  ensureAudio();
+  player.reloadTimer = 1.0;
+  playReloadStart();
+  showToast("Reloading...", 0.75);
+  return true;
+}
+
 function tryShoot() {
   if (game.mode !== "running") return;
   if (player.fireCooldown > 0) return;
+  if (player.reloadTimer > 0) return;
 
   player.fireCooldown = 0.16;
   player.weaponKick = 1;
@@ -711,14 +810,14 @@ function tryShoot() {
   game.shake = clamp(game.shake + 0.12, 0, 1.3);
   game.shots += 1;
 
-  if (player.ammo <= 0) {
+  if (player.clipAmmo <= 0) {
     playEmpty();
-    showToast("No ammo", 0.8);
+    showToast("Clip empty (R to reload)", 0.8);
     return;
   }
 
   ensureAudio();
-  player.ammo -= 1;
+  player.clipAmmo -= 1;
   playShot();
 
   const spread = randomRange(-0.018, 0.018);
@@ -775,8 +874,8 @@ function updatePickups() {
       player.armor = clamp(player.armor + 26, 0, 100);
       showToast("Armor +26");
     } else if (pickup.type === "ammo") {
-      player.ammo = clamp(player.ammo + 20, 0, 120);
-      showToast("Ammo +20");
+      player.reserveAmmo = clamp(player.reserveAmmo + 24, 0, 240);
+      showToast("Ammo +24");
     } else if (pickup.type === "key") {
       player.keycard = true;
       showToast("Blue keycard acquired");
@@ -1253,6 +1352,15 @@ function update(dt) {
   if (game.comboTimer <= 0) game.combo = 0;
 
   player.fireCooldown = Math.max(0, player.fireCooldown - dt);
+  const prevReload = player.reloadTimer;
+  player.reloadTimer = Math.max(0, player.reloadTimer - dt);
+  if (prevReload > 0 && player.reloadTimer <= 0 && player.reloadTransfer > 0) {
+    player.clipAmmo += player.reloadTransfer;
+    player.reserveAmmo -= player.reloadTransfer;
+    player.reloadTransfer = 0;
+    playReloadEnd();
+    updateHud();
+  }
   player.muzzle = Math.max(0, player.muzzle - dt * 2.8);
   player.weaponKick = lerp(player.weaponKick, 0, clamp(dt * 15, 0, 1));
   player.hurt = Math.max(0, player.hurt - dt * 1.95);
@@ -1282,7 +1390,8 @@ function isMovementKey(code) {
     code === "ShiftRight" ||
     code === "Space" ||
     code === "KeyE" ||
-    code === "KeyM"
+    code === "KeyM" ||
+    code === "KeyR"
   );
 }
 
@@ -1336,6 +1445,12 @@ function setupInput() {
     if (event.code === "KeyE") {
       queueInteract();
       event.preventDefault();
+    }
+
+    if (event.code === "KeyR") {
+      startReload();
+      event.preventDefault();
+      return;
     }
 
     if (isMovementKey(event.code)) {
