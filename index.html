@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="et">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skyline Runner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="title-wrap">
+      <h1>Skyline Runner</h1>
+      <p>Modern 2D platformer</p>
+    </header>
+
+    <section class="game-shell">
+      <canvas id="game" width="960" height="540" aria-label="Platformer game area"></canvas>
+
+      <div id="overlay" class="overlay visible" role="dialog" aria-live="polite">
+        <h2 id="overlayTitle">Skyline Runner</h2>
+        <p id="overlayText">Collect coins, avoid bots, and reach the flag.</p>
+        <button id="startBtn" class="btn">Start Game</button>
+      </div>
+    </section>
+
+    <section class="hud">
+      <div class="stat-card">
+        <span>Level</span>
+        <strong id="levelValue">1</strong>
+      </div>
+      <div class="stat-card">
+        <span>Score</span>
+        <strong id="scoreValue">0</strong>
+      </div>
+      <div class="stat-card">
+        <span>Lives</span>
+        <strong id="livesValue">3</strong>
+      </div>
+      <button id="pauseBtn" class="btn btn-ghost" type="button">Pause</button>
+      <button id="restartBtn" class="btn btn-ghost" type="button">Restart</button>
+    </section>
+
+    <section class="help">
+      <p><b>Keyboard:</b> A / D or Arrow keys to move, W / Space / ArrowUp to jump, Esc to pause.</p>
+    </section>
+
+    <section class="touch-controls" aria-label="Touch controls">
+      <button class="touch-btn" data-key="left" type="button">Left</button>
+      <button class="touch-btn" data-key="jump" type="button">Jump</button>
+      <button class="touch-btn" data-key="right" type="button">Right</button>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
