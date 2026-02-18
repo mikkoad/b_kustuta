@@ -3,56 +3,91 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Skyline Runner</title>
+  <title>HELLGRID: BREACH</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app">
-    <header class="title-wrap">
-      <h1>Mingi mõttetu mäng</h1>
-      <p>Modern 2D platformer</p>
-    </header>
+  <main class="game-root">
+    <canvas id="view" width="960" height="540" aria-label="FPS game view"></canvas>
+    <canvas id="minimap" width="220" height="220" class="minimap hidden" aria-label="Minimap"></canvas>
 
-    <section class="game-shell">
-      <canvas id="game" width="960" height="540" aria-label="Platformer game area"></canvas>
+    <div id="damageVignette" class="damage-vignette"></div>
 
-      <div id="overlay" class="overlay visible" role="dialog" aria-live="polite">
-        <h2 id="overlayTitle">Skyline Runner</h2>
-        <p id="overlayText">Collect coins, avoid bots, and reach the flag.</p>
-        <button id="startBtn" class="btn">Start Game</button>
+    <section class="hud-top">
+      <div class="hud-block">
+        <span class="label">Level</span>
+        <strong id="levelName">Breach 01</strong>
       </div>
-    </section>
-
-    <section class="hud">
-      <div class="stat-card">
-        <span>Level</span>
-        <strong id="levelValue">1</strong>
+      <div class="hud-block">
+        <span class="label">Objective</span>
+        <strong id="objectiveText">Find keycard and reach the exit.</strong>
       </div>
-      <div class="stat-card">
-        <span>Score</span>
+      <div class="hud-block compact">
+        <span class="label">Kills</span>
+        <strong id="killsValue">0 / 0</strong>
+      </div>
+      <div class="hud-block compact">
+        <span class="label">Score</span>
         <strong id="scoreValue">0</strong>
       </div>
-      <div class="stat-card">
-        <span>Lives</span>
-        <strong id="livesValue">3</strong>
+    </section>
+
+    <section class="hud-bottom">
+      <div class="meter-group">
+        <span>Health</span>
+        <div class="meter"><i id="healthBar"></i></div>
+        <strong id="healthValue">100</strong>
       </div>
-      <button id="pauseBtn" class="btn btn-ghost" type="button">Pause</button>
-      <button id="restartBtn" class="btn btn-ghost" type="button">Restart</button>
+      <div class="meter-group">
+        <span>Armor</span>
+        <div class="meter cyan"><i id="armorBar"></i></div>
+        <strong id="armorValue">40</strong>
+      </div>
+      <div class="meter-group">
+        <span>Ammo</span>
+        <div class="meter amber"><i id="ammoBar"></i></div>
+        <strong id="ammoValue">42</strong>
+      </div>
+      <div class="keycard">
+        Keycard
+        <strong id="keyValue">No</strong>
+      </div>
     </section>
 
-    <section class="help">
-      <p><b>Keyboard:</b> A / D or Arrow keys to move, W / Space / ArrowUp to jump, Esc to pause.</p>
+    <div id="crosshair" class="crosshair"></div>
+    <div id="toast" class="toast"></div>
+
+    <section id="touchControls" class="touch-controls" aria-label="Touch controls">
+      <button data-action="forward" type="button">W</button>
+      <button data-action="left" type="button">A</button>
+      <button data-action="backward" type="button">S</button>
+      <button data-action="right" type="button">D</button>
+      <button data-action="turnLeft" type="button">Turn L</button>
+      <button data-action="turnRight" type="button">Turn R</button>
+      <button data-action="shoot" type="button" class="fire">Shoot</button>
+      <button data-action="interact" type="button">Use</button>
     </section>
 
-    <section class="touch-controls" aria-label="Touch controls">
-      <button class="touch-btn" data-key="left" type="button">Left</button>
-      <button class="touch-btn" data-key="jump" type="button">Jump</button>
-      <button class="touch-btn" data-key="right" type="button">Right</button>
+    <section id="overlay" class="overlay visible" role="dialog" aria-live="polite">
+      <div class="overlay-card">
+        <h1 id="overlayTitle">HELLGRID: BREACH</h1>
+        <p id="overlayText">
+          Infiltrate the complex, recover keycards, neutralize hostiles, and escape each sector alive.
+        </p>
+        <p class="controls">
+          WASD move, mouse look, click or Space shoot, E interact, Shift sprint, M minimap, Esc pause.
+        </p>
+        <div class="overlay-actions">
+          <button id="startBtn" class="btn primary" type="button">Start Mission</button>
+          <button id="resumeBtn" class="btn ghost hidden" type="button">Resume</button>
+          <button id="restartBtn" class="btn ghost" type="button">Restart Run</button>
+        </div>
+      </div>
     </section>
-  </div>
+  </main>
 
   <script src="script.js"></script>
 </body>
